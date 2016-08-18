@@ -493,6 +493,8 @@ public class GlossaryService implements GlossaryResource {
         glossaryEntry.setSourceReference(hGlossaryEntry.getSourceRef());
         glossaryEntry.setPos(hGlossaryEntry.getPos());
         glossaryEntry.setDescription(hGlossaryEntry.getDescription());
+        glossaryEntry.setQualifiedName(
+                hGlossaryEntry.getGlossary().getQualifiedName());
         glossaryEntry.setTermsCount(hGlossaryEntry.getGlossaryTerms().size());
         return glossaryEntry;
     }

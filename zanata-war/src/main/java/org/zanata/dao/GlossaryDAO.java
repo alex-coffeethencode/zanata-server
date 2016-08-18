@@ -83,7 +83,7 @@ public class GlossaryDAO extends AbstractDAOImpl<HGlossaryEntry, Long> {
         StringBuilder queryString = new StringBuilder();
         queryString.append("select term.glossaryEntry from HGlossaryTerm as term ")
             .append("where term.locale.localeId = term.glossaryEntry.srcLocale.localeId ")
-            .append("and term.glossaryEntry.glossary.qualifiedName =: qualifiedName ")
+            .append("and term.glossaryEntry.glossary.qualifiedName =:qualifiedName ")
             .append("order by term.content");
         Query query = getSession().createQuery(queryString.toString());
         query.setParameter("qualifiedName", qualifiedName)

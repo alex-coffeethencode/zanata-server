@@ -5,6 +5,7 @@ import static org.zanata.common.EntityStatus.READONLY;
 import static org.zanata.rest.service.GlossaryService.PROJECT_QUALIFIER_PREFIX;
 
 import java.net.URI;
+import java.util.List;
 
 import javax.annotation.Nonnull;
 import javax.enterprise.context.RequestScoped;
@@ -21,6 +22,7 @@ import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
+import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.jboss.resteasy.util.HttpHeaderNames;
 import javax.inject.Inject;
@@ -188,7 +190,9 @@ public class ProjectService implements ProjectResource {
 
     @Override
     public Response getGlossaryQualifiedName() {
-        return Response.ok(getGlossaryQualifiedName(projectSlug)).build();
+        List<String> names =
+            Lists.newArrayList(getGlossaryQualifiedName(projectSlug));
+        return Response.ok(names).build();
     }
 
     public static String getGlossaryQualifiedName(String projectSlug) {

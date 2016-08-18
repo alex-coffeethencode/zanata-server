@@ -1,6 +1,6 @@
 import { createAction } from 'redux-actions'
 import { CALL_API } from 'redux-api-middleware'
-import { cloneDeep, includes, debounce, last } from 'lodash'
+import { cloneDeep, includes, debounce, first, last, isArray } from 'lodash'
 import { saveAs } from 'file-saver'
 import { normalize } from 'normalizr'
 import { GLOSSARY_TERM_ARRAY } from '../schemas.js'
@@ -60,6 +60,14 @@ export const GLOSSARY_DELETE_ALL_FAILURE = 'GLOSSARY_DELETE_ALL_FAILURE'
 export const GLOSSARY_EXPORT_REQUEST = 'GLOSSARY_EXPORT_REQUEST'
 export const GLOSSARY_EXPORT_SUCCESS = 'GLOSSARY_EXPORT_SUCCESS'
 export const GLOSSARY_EXPORT_FAILURE = 'GLOSSARY_EXPORT_FAILURE'
+
+export const GLOSSARY_GET_QUALIFIED_NAME_REQUEST =
+  'GLOSSARY_GET_QUALIFIED_NAME_REQUEST'
+export const GLOSSARY_GET_QUALIFIED_NAME_SUCCESS =
+  'GLOSSARY_GET_QUALIFIED_NAME_SUCCESS'
+export const GLOSSARY_GET_QUALIFIED_NAME_FAILURE =
+  'GLOSSARY_GET_QUALIFIED_NAME_FAILURE'
+
 export const glossaryUpdateLocale = createAction(GLOSSARY_UPDATE_LOCALE)
 export const glossaryUpdateFilter = createAction(GLOSSARY_UPDATE_FILTER)
 export const glossaryUpdateField = createAction(GLOSSARY_UPDATE_FIELD)
@@ -86,7 +94,8 @@ const getGlossaryTerms = (state) => {
     src = DEFAULT_LOCALE.localeId,
     locale = '',
     filter = '',
-    sort = ''
+    sort = '',
+    qualifiedName
   } = state.glossary
   const query = state.routing.location.query
 
@@ -103,9 +112,10 @@ const getGlossaryTerms = (state) => {
   const filterQuery = filter ? `&filter=${filter}` : ''
   const sortQuery = sort
     ? `&sort=${GlossaryHelper.convertSortToParam(sort)}` : ''
+  const qualifiedNameQuery = '&qualifiedName=' + qualifiedName
   const endpoint = window.config.baseUrl + window.config.apiRoot +
     '/glossary/entries' + srcQuery +
-    localeQuery + pageQuery + filterQuery + sortQuery
+    localeQuery + pageQuery + filterQuery + sortQuery + qualifiedNameQuery
 
   const apiTypes = [
     GLOSSARY_TERMS_REQUEST,
@@ -131,9 +141,9 @@ const getGlossaryTerms = (state) => {
   }
 }
 
-const getGlossaryStats = (dispatch, resetTerms) => {
+const getGlossaryStats = (dispatch, qualifiedName, resetTerms) => {
   const endpoint = window.config.baseUrl + window.config.apiRoot +
-    '/glossary/info'
+    '/glossary/info?qualifiedName=' + qualifiedName
   const apiTypes = [
     GLOSSARY_STATS_REQUEST,
     {
@@ -152,12 +162,37 @@ const getGlossaryStats = (dispatch, resetTerms) => {
   }
 }
 
-const importGlossaryFile = (dispatch, data, srcLocaleId) => {
+const getQualifiedName = (dispatch, projectSlug) => {
+  const endpoint = window.config.baseUrl + window.config.apiRoot +
+    (projectSlug ? '/projects/p/' + projectSlug + '/glossary/qualifiedName'
+      : '/glossary/qualifiedName')
+
+  const apiTypes = [
+    GLOSSARY_GET_QUALIFIED_NAME_REQUEST,
+    {
+      type: GLOSSARY_GET_QUALIFIED_NAME_SUCCESS,
+      payload: (action, state, res) => {
+        return res.json().then((json) => {
+          const qualifiedName = isArray(json) ? first(json) : json
+          dispatch(getGlossaryStats(dispatch, qualifiedName, true))
+          return qualifiedName
+        })
+      }
+    },
+    GLOSSARY_GET_QUALIFIED_NAME_FAILURE
+  ]
+  return {
+    [CALL_API]: buildAPIRequest(endpoint, 'GET', getJsonHeaders(), apiTypes)
+  }
+}
+
+const importGlossaryFile = (dispatch, data, qualifiedName, srcLocaleId) => {
   const endpoint = window.config.baseUrl + window.config.apiRoot + '/glossary'
   let formData = new FormData()
   formData.append('file', data.file, data.file.name)
   formData.append('fileName', data.file.name)
   formData.append('srcLocale', srcLocaleId)
+  formData.append('qualifiedName', qualifiedName)
   if (data.transLocale) {
     formData.append('transLocale', data.transLocale.value)
   }
@@ -168,7 +203,7 @@ const importGlossaryFile = (dispatch, data, srcLocaleId) => {
       type: GLOSSARY_UPLOAD_SUCCESS,
       payload: (action, state, res) => {
         return res.json().then((json) => {
-          dispatch(getGlossaryStats(dispatch, true))
+          dispatch(getGlossaryStats(dispatch, qualifiedName, true))
           return json
         })
       }
@@ -181,12 +216,12 @@ const importGlossaryFile = (dispatch, data, srcLocaleId) => {
   }
 }
 
-const createGlossaryTerm = (dispatch, term) => {
+const createGlossaryTerm = (dispatch, qualifiedName, term) => {
   let headers = getJsonHeaders()
   headers['Content-Type'] = 'application/json'
   const endpoint = window.config.baseUrl + window.config.apiRoot +
     '/glossary/entries'
-  const entryDTO = GlossaryHelper.convertToDTO(term)
+  const entryDTO = GlossaryHelper.convertToDTO(term, qualifiedName)
   const apiTypes = [
     {
       type: GLOSSARY_CREATE_REQUEST,
@@ -198,7 +233,7 @@ const createGlossaryTerm = (dispatch, term) => {
       type: GLOSSARY_CREATE_SUCCESS,
       payload: (action, state, res) => {
         return res.json().then((json) => {
-          dispatch(getGlossaryStats(dispatch, true))
+          dispatch(getGlossaryStats(dispatch, state.qualifiedName, true))
           return json
         })
       }
@@ -211,13 +246,13 @@ const createGlossaryTerm = (dispatch, term) => {
   }
 }
 
-const updateGlossaryTerm = (dispatch, term, needRefresh) => {
+const updateGlossaryTerm = (dispatch, qualifiedName, term, needRefresh) => {
   let headers = getJsonHeaders()
   headers['Content-Type'] = 'application/json'
 
   const endpoint = window.config.baseUrl + window.config.apiRoot +
     '/glossary/entries'
-  const entryDTO = GlossaryHelper.convertToDTO(term)
+  const entryDTO = GlossaryHelper.convertToDTO(term, qualifiedName)
 
   const apiTypes = [
     {
@@ -230,7 +265,8 @@ const updateGlossaryTerm = (dispatch, term, needRefresh) => {
       type: GLOSSARY_UPDATE_SUCCESS,
       payload: (action, state, res) => {
         return res.json().then((json) => {
-          needRefresh && dispatch(getGlossaryStats(dispatch, false))
+          needRefresh &&
+            dispatch(getGlossaryStats(dispatch, state.qualifiedName, false))
           return json
         })
       }
@@ -257,7 +293,7 @@ const deleteGlossaryTerm = (dispatch, id) => {
       type: GLOSSARY_DELETE_SUCCESS,
       payload: (action, state, res) => {
         return res.json().then((json) => {
-          dispatch(getGlossaryStats(dispatch, true))
+          dispatch(getGlossaryStats(dispatch, state.qualifiedName, true))
           return json
         })
       }
@@ -269,8 +305,9 @@ const deleteGlossaryTerm = (dispatch, id) => {
   }
 }
 
-const deleteAllGlossaryEntry = (dispatch) => {
-  const endpoint = window.config.baseUrl + window.config.apiRoot + '/glossary'
+const deleteAllGlossaryEntry = (dispatch, qualifiedName) => {
+  const endpoint = window.config.baseUrl + window.config.apiRoot +
+    '/glossary?qualifiedName=' + qualifiedName
   const apiTypes = [
     {
       type: GLOSSARY_DELETE_ALL_REQUEST,
@@ -281,7 +318,7 @@ const deleteAllGlossaryEntry = (dispatch) => {
     {
       type: GLOSSARY_DELETE_ALL_SUCCESS,
       payload: (action, state, res) => {
-        return dispatch(getGlossaryStats(dispatch, true))
+        return dispatch(getGlossaryStats(dispatch, state.qualifiedName, true))
       }
     },
     GLOSSARY_DELETE_ALL_FAILURE
@@ -291,9 +328,9 @@ const deleteAllGlossaryEntry = (dispatch) => {
   }
 }
 
-const glossaryExport = (type) => {
+const glossaryExport = (type, qualifiedName) => {
   const endpoint = window.config.baseUrl + window.config.apiRoot +
-    '/glossary/file?fileType=' + type
+    '/glossary/file?fileType=' + type + '&qualifiedName=' + qualifiedName
   let headers = getJsonHeaders()
   headers['Content-Type'] = 'application/octet-stream'
   const apiTypes = [
@@ -323,18 +360,19 @@ const glossaryExport = (type) => {
 
 export const glossaryDownload = () => {
   return (dispatch, getState) => {
-    dispatch(glossaryExport(getState().glossary.exportFile.type.value))
+    dispatch(glossaryExport(getState().glossary.exportFile.type.value,
+      getState().glossary.qualifiedName))
   }
 }
 
 export const glossaryInitStateFromUrl =
   createAction(GLOSSARY_INIT_STATE_FROM_URL)
 
-export const glossaryInitialLoad = () => {
+export const glossaryInitialLoad = (projectSlug) => {
   return (dispatch, getState) => {
     const query = getState().routing.location.query
-    dispatch(glossaryInitStateFromUrl(query))
-    dispatch(getGlossaryStats(dispatch, true))
+    dispatch(glossaryInitStateFromUrl({ query, projectSlug }))
+    dispatch(getQualifiedName(dispatch, projectSlug))
   }
 }
 
@@ -368,20 +406,23 @@ export const glossaryDeleteTerm = (id) => {
 
 export const glossaryDeleteAll = () => {
   return (dispatch, getState) => {
-    dispatch(deleteAllGlossaryEntry(dispatch))
+    dispatch(deleteAllGlossaryEntry(dispatch,
+      getState().glossary.qualifiedName))
   }
 }
 
 export const glossaryUpdateTerm = (term, needRefresh) => {
   return (dispatch, getState) => {
     // do cloning to prevent changes in selectedTerm
-    dispatch(updateGlossaryTerm(dispatch, cloneDeep(term), needRefresh))
+    dispatch(updateGlossaryTerm(dispatch, getState().glossary.qualifiedName,
+      cloneDeep(term), needRefresh))
   }
 }
 
 export const glossaryCreateNewEntry = (entry) => {
   return (dispatch, getState) => {
-    dispatch(createGlossaryTerm(dispatch, entry))
+    dispatch(createGlossaryTerm(dispatch, getState().glossary.qualifiedName,
+      entry))
   }
 }
 
@@ -389,6 +430,7 @@ export const glossaryImportFile = () => {
   return (dispatch, getState) => {
     dispatch(importGlossaryFile(dispatch,
       getState().glossary.importFile,
+      getState().glossary.qualifiedName,
       getState().glossary.stats.srcLocale.locale.localeId))
   }
 }

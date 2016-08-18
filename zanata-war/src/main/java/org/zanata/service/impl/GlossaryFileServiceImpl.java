@@ -312,6 +312,7 @@ public class GlossaryFileServiceImpl implements GlossaryFileService {
         if (glossary == null) {
             glossary = new Glossary(qualifiedName);
             glossaryDAO.persistGlossary(glossary);
+            glossaryDAO.flush();
         }
 
         to.setGlossary(glossary);

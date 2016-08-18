@@ -1,10 +1,10 @@
 import React, { PropTypes } from 'react'
 import NavItem from './NavItem'
 import { flattenThemeClasses } from 'zanata-ui'
+import { startsWith } from 'lodash'
+import { getDswid } from '../../utils/UrlHelper'
 
-const dswid = window.dswh && window.dswh.windowId
-  ? '?dswid=' + window.dswh.windowId
-  : ''
+const dswid = getDswid()
 
 /**
  * URL path for frontend
@@ -167,7 +167,7 @@ const Nav = ({
             loading={loading}
             id={item.id}
             small={item.small}
-            active={active.indexOf(link) >= 0}
+            active={startsWith(link, active)}
             link={link}
             useHref={useHref}
             icon={item.icon}
